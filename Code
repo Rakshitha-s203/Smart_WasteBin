@@ -1,0 +1,93 @@
+#define BLYNK_TEMPLATE_ID "Template ID"
+#define BLYNK_TEMPLATE_NAME "Template Name"
+#define BLYNK_AUTH_TOKEN "Auth Token"
+
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Servo.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "YOUR_WIFI_SSID";
+char pass[] = "YOUR_WIFI_PASSWORD";
+
+BlynkTimer timer;
+
+#define personTrigPin 33
+#define personEchoPin 32
+
+#define binTrigPin 27
+#define binEchoPin 26
+
+Servo servo;
+
+long duration;
+int distancePerson;
+int distanceBin;
+int binLevel;
+
+void detectPersonAndOpenLid() {
+  digitalWrite(personTrigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(personTrigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(personTrigPin, LOW);
+
+  duration = pulseIn(personEchoPin, HIGH);
+  distancePerson = duration * 0.034 / 2;
+
+  if (distancePerson > 0 && distancePerson < 20) {
+    servo.write(90); // open lid
+    Blynk.virtualWrite(V2, 90);
+    delay(2000); // keep open for 2 seconds
+    servo.write(0); // close lid
+    Blynk.virtualWrite(V2, 0);
+  }
+}
+
+void detectBinLevel() {
+  digitalWrite(binTrigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(binTrigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(binTrigPin, LOW);
+
+  duration = pulseIn(binEchoPin, HIGH);
+  distanceBin = duration * 0.034 / 2;
+
+  // Adjust these values based on your bin height (e.g., 0 = full, 21 = empty)
+  binLevel = map(distanceBin, 21, 0, 0, 100);
+  if (binLevel > 100) binLevel = 100;
+  if (binLevel < 0) binLevel = 0;
+
+  Blynk.virtualWrite(V0, distanceBin);
+  Blynk.virtualWrite(V1, binLevel);
+
+  if (binLevel >= 90) {
+    Blynk.logEvent("bin_full", "Smart Bin is Full!");
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  servo.attach(13);
+  
+  pinMode(personTrigPin, OUTPUT);
+  pinMode(personEchoPin, INPUT);
+  
+  pinMode(binTrigPin, OUTPUT);
+  pinMode(binEchoPin, INPUT);
+
+  Blynk.begin(auth, ssid, pass);
+  delay(2000);
+
+  timer.setInterval(1000L, detectPersonAndOpenLid);
+  timer.setInterval(2000L, detectBinLevel);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
